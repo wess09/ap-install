@@ -5,7 +5,7 @@
 
 [Setup]
 AppName=AzurPilot
-AppVersion=1.6.0-测试版
+AppVersion=1.6.1
 AppPublisher=AzurPilot Team
 AppId={{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
 
@@ -41,7 +41,9 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Name: "{app}";          Permissions: users-modify
 Name: "{app}\config";   Permissions: users-modify
 Name: "{app}\deploy";   Permissions: users-modify
-Name: "{app}\toolkit";  Permissions: users-modify
+Name: "{app}\.venv";    Permissions: users-modify
+Name: "{app}\bootstrap";  Permissions: users-modify
+
 
 ; --------------------------------------------------------------------------
 ;  应用文件 + 运行时安装器
@@ -51,13 +53,13 @@ Name: "{app}\toolkit";  Permissions: users-modify
 Source: "alas-launcher.exe";  DestDir: "{app}";          Flags: ignoreversion; Permissions: users-modify
 Source: "config\*";           DestDir: "{app}\config";   Flags: ignoreversion recursesubdirs createallsubdirs; Permissions: users-modify
 Source: "deploy\*";           DestDir: "{app}\deploy";   Flags: ignoreversion recursesubdirs createallsubdirs; Permissions: users-modify
-Source: "toolkit\*";          DestDir: "{app}\toolkit";  Flags: ignoreversion recursesubdirs createallsubdirs; Permissions: users-modify
-Source: "requirements.txt";   DestDir: "{app}";          Flags: ignoreversion; Permissions: users-modify
+Source: ".venv\*";            DestDir: "{app}\.venv";    Flags: ignoreversion recursesubdirs createallsubdirs; Permissions: users-modify
+Source: "bootstrap\*";        DestDir: "{app}\bootstrap";  Flags: ignoreversion recursesubdirs createallsubdirs; Permissions: users-modify
 
 ; 运行时安装器（释放到临时目录，安装后自动清理）
-Source: "setup\MicrosoftEdgeWebview2Setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
-Source: "setup\vcredist_x64.exe";               DestDir: "{tmp}"; Flags: deleteafterinstall; Check: IsWin64
-Source: "setup\vcredist_x86.exe";               DestDir: "{tmp}"; Flags: deleteafterinstall
+Source: "setup\MicrosoftEdgeWebview2Setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall skipifsourcedoesntexist
+Source: "setup\vcredist_x64.exe";               DestDir: "{tmp}"; Flags: deleteafterinstall skipifsourcedoesntexist; Check: IsWin64
+Source: "setup\vcredist_x86.exe";               DestDir: "{tmp}"; Flags: deleteafterinstall skipifsourcedoesntexist
 
 [Icons]
 Name: "{autoprograms}\AzurPilot"; Filename: "{app}\alas-launcher.exe"; WorkingDir: "{app}"
