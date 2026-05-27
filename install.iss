@@ -7,7 +7,7 @@
 AppName=AzurPilot
 AppVersion=1.6.1
 AppPublisher=AzurPilot Team
-AppId={{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
+AppId={{1A779131-3DD5-067C-0ABC-E656396F6879}
 
 DefaultDirName={autopf}\AzurPilot
 AppendDefaultDirName=yes
