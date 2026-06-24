@@ -5,7 +5,7 @@
 
 [Setup]
 AppName=AzurPilot
-AppVersion=1.6.1
+AppVersion=1.0.2-lite
 AppPublisher=AzurPilot Team
 AppId={{1A779131-3DD5-067C-0ABC-E656396F6879}
 
@@ -41,7 +41,6 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Name: "{app}";          Permissions: users-modify
 Name: "{app}\config";   Permissions: users-modify
 Name: "{app}\deploy";   Permissions: users-modify
-Name: "{app}\.venv";    Permissions: users-modify
 Name: "{app}\bootstrap";  Permissions: users-modify
 
 
@@ -53,7 +52,6 @@ Name: "{app}\bootstrap";  Permissions: users-modify
 Source: "alas-launcher.exe";  DestDir: "{app}";          Flags: ignoreversion; Permissions: users-modify
 Source: "config\*";           DestDir: "{app}\config";   Flags: ignoreversion recursesubdirs createallsubdirs; Permissions: users-modify
 Source: "deploy\*";           DestDir: "{app}\deploy";   Flags: ignoreversion recursesubdirs createallsubdirs; Permissions: users-modify
-Source: ".venv\*";            DestDir: "{app}\.venv";    Flags: ignoreversion recursesubdirs createallsubdirs; Permissions: users-modify
 Source: "bootstrap\*";        DestDir: "{app}\bootstrap";  Flags: ignoreversion recursesubdirs createallsubdirs; Permissions: users-modify
 
 ; 运行时安装器（释放到临时目录，安装后自动清理）
