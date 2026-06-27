@@ -5,7 +5,7 @@
 
 [Setup]
 AppName=AzurPilot
-AppVersion=1.0.2-lite
+AppVersion=1.0.3-lite
 AppPublisher=AzurPilot Team
 AppId={{1A779131-3DD5-067C-0ABC-E656396F6879}
 
@@ -41,6 +41,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Name: "{app}";          Permissions: users-modify
 Name: "{app}\config";   Permissions: users-modify
 Name: "{app}\deploy";   Permissions: users-modify
+
 Name: "{app}\bootstrap";  Permissions: users-modify
 
 
@@ -52,12 +53,13 @@ Name: "{app}\bootstrap";  Permissions: users-modify
 Source: "alas-launcher.exe";  DestDir: "{app}";          Flags: ignoreversion; Permissions: users-modify
 Source: "config\*";           DestDir: "{app}\config";   Flags: ignoreversion recursesubdirs createallsubdirs; Permissions: users-modify
 Source: "deploy\*";           DestDir: "{app}\deploy";   Flags: ignoreversion recursesubdirs createallsubdirs; Permissions: users-modify
+
 Source: "bootstrap\*";        DestDir: "{app}\bootstrap";  Flags: ignoreversion recursesubdirs createallsubdirs; Permissions: users-modify
 
 ; 运行时安装器（释放到临时目录，安装后自动清理）
-Source: "setup\MicrosoftEdgeWebview2Setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall skipifsourcedoesntexist
-Source: "setup\vcredist_x64.exe";               DestDir: "{tmp}"; Flags: deleteafterinstall skipifsourcedoesntexist; Check: IsWin64
-Source: "setup\vcredist_x86.exe";               DestDir: "{tmp}"; Flags: deleteafterinstall skipifsourcedoesntexist
+Source: "setup\MicrosoftEdgeWebview2Setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; Check: ShouldInstallRuntime
+Source: "setup\vcredist_x64.exe";               DestDir: "{tmp}"; Flags: deleteafterinstall; Check: ShouldInstallRuntime64
+Source: "setup\vcredist_x86.exe";               DestDir: "{tmp}"; Flags: deleteafterinstall; Check: ShouldInstallRuntime
 
 [Icons]
 Name: "{autoprograms}\AzurPilot"; Filename: "{app}\alas-launcher.exe"; WorkingDir: "{app}"
@@ -72,18 +74,20 @@ Filename: "{tmp}\vcredist_x64.exe"; \
   Parameters: "/install /quiet /norestart"; \
   StatusMsg: "正在从塞壬主服务器里偷取最新的运行环境 (x64)..."; \
   Flags: waituntilterminated skipifdoesntexist; \
-  Check: IsWin64
+  Check: ShouldInstallRuntime64
 
 Filename: "{tmp}\vcredist_x86.exe"; \
   Parameters: "/install /quiet /norestart"; \
   StatusMsg: "正在从塞壬主服务器里偷取最新的运行环境 (x86)..."; \
-  Flags: waituntilterminated skipifdoesntexist
+  Flags: waituntilterminated skipifdoesntexist; \
+  Check: ShouldInstallRuntime
 
 ; WebView2 Bootstrapper：联网检测+安装，可能耗时较长
 Filename: "{tmp}\MicrosoftEdgeWebview2Setup.exe"; \
   Parameters: "/silent /install"; \
   StatusMsg: "正在向明石支付800红宝石以解锁WebView2的下载带宽（可能需要几分钟）..."; \
-  Flags: waituntilterminated skipifdoesntexist
+  Flags: waituntilterminated skipifdoesntexist; \
+  Check: ShouldInstallRuntime
 
 Filename: "{app}\alas-launcher.exe"; \
   Description: "{cm:LaunchProgram,AzurPilot}"; \
@@ -216,11 +220,12 @@ function GetTickCount: Cardinal;
 //  全局变量
 // ==========================================================================
 var
+  InstallModePage: TInputOptionWizardPage;
+
   AgreementPage: TWizardPage;
   AgreementCheck: TNewCheckBox;
   AgreementBrowser: HWND;
   AgreementWrapperPath: String;
-  AgreementOpenButton: TNewButton;
 
   ETALabel: TNewStaticText;
   InstallStartTick: Cardinal;
@@ -228,6 +233,86 @@ var
 
   KeepDeployYaml: Boolean;
   DeployYamlBackupPath: String;
+
+  ExistingInstallFound: Boolean;
+  SelectedInstallMode: Integer;
+
+const
+  INSTALL_MODE_INSTALL = 0;
+  INSTALL_MODE_UPDATE = 1;
+  INSTALL_MODE_REPAIR = 2;
+
+function HasExistingInstallAt(const Dir: String): Boolean;
+begin
+  Result :=
+    DirExists(Dir) and
+    (
+      FileExists(AddBackslash(Dir) + 'alas-launcher.exe') or
+      DirExists(AddBackslash(Dir) + 'config') or
+      DirExists(AddBackslash(Dir) + 'deploy') or
+      DirExists(AddBackslash(Dir) + 'bootstrap')
+    );
+end;
+
+function CurrentInstallMode: Integer;
+begin
+  if ExistingInstallFound then
+    Result := SelectedInstallMode
+  else
+    Result := INSTALL_MODE_INSTALL;
+end;
+
+function IsUpdateMode: Boolean;
+begin
+  Result := CurrentInstallMode = INSTALL_MODE_UPDATE;
+end;
+
+function IsRepairMode: Boolean;
+begin
+  Result := CurrentInstallMode = INSTALL_MODE_REPAIR;
+end;
+
+function ShouldInstallRuntime: Boolean;
+begin
+  Result := not IsUpdateMode;
+end;
+
+function ShouldInstallRuntime64: Boolean;
+begin
+  Result := IsWin64 and ShouldInstallRuntime;
+end;
+
+// ==========================================================================
+//  已安装时的操作类型选择
+// ==========================================================================
+procedure CreateInstallModePage;
+begin
+  InstallModePage := CreateInputOptionPage(
+    wpSelectDir,
+    '选择维护方式',
+    '检测到本计算机已有 AzurPilot，请选择本次要执行的操作。',
+    '',
+    True,
+    False
+  );
+  InstallModePage.Add('安装');
+  InstallModePage.Add('更新');
+  InstallModePage.Add('修复');
+  InstallModePage.Values[0] := True;
+end;
+
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  Result := False;
+
+  if Assigned(InstallModePage) and (PageID = InstallModePage.ID) then
+  begin
+    ExistingInstallFound := HasExistingInstallAt(RemoveBackslashUnlessRoot(WizardDirValue));
+    Result := not ExistingInstallFound;
+    if not ExistingInstallFound then
+      SelectedInstallMode := INSTALL_MODE_INSTALL;
+  end;
+end;
 
 // ==========================================================================
 //  用户协议页面
@@ -288,13 +373,6 @@ begin
   Result := 'file:///' + Result;
 end;
 
-procedure AgreementOpenButtonClick(Sender: TObject);
-var
-  ResultCode: Integer;
-begin
-  ShellExec('open', AGREEMENT_URL, '', '', SW_SHOWNORMAL, ewNoWait, ResultCode);
-end;
-
 procedure CreateAgreementPage;
 var
   BrowserTop: Integer;
@@ -308,7 +386,7 @@ begin
   );
 
   BrowserTop := 0;
-  BrowserHeight := AgreementPage.SurfaceHeight - ScaleY(64);
+  BrowserHeight := AgreementPage.SurfaceHeight - ScaleY(34);
 
   if PrepareAgreementWrapper then
     BrowserUrl := LocalPathToFileUrl(AgreementWrapperPath)
@@ -331,15 +409,6 @@ begin
     );
   end;
 
-  AgreementOpenButton := TNewButton.Create(AgreementPage);
-  AgreementOpenButton.Parent := AgreementPage.Surface;
-  AgreementOpenButton.Left := ScaleX(0);
-  AgreementOpenButton.Top := AgreementPage.SurfaceHeight - ScaleY(58);
-  AgreementOpenButton.Width := ScaleX(150);
-  AgreementOpenButton.Height := ScaleY(24);
-  AgreementOpenButton.Caption := '用浏览器打开协议';
-  AgreementOpenButton.OnClick := @AgreementOpenButtonClick;
-
   AgreementCheck := TNewCheckBox.Create(AgreementPage);
   AgreementCheck.Parent := AgreementPage.Surface;
   AgreementCheck.Left := ScaleX(0);
@@ -356,6 +425,10 @@ end;
 // ==========================================================================
 procedure InitializeWizard;
 begin
+  SelectedInstallMode := INSTALL_MODE_INSTALL;
+  ExistingInstallFound := False;
+
+  CreateInstallModePage;
   CreateAgreementPage;
 
   ETALabel := TNewStaticText.Create(WizardForm);
@@ -483,8 +556,22 @@ end;
 function NextButtonClick(CurPageID: Integer): Boolean;
 var
   Dir, FixedDir: String;
+  I: Integer;
 begin
   Result := True;
+
+  if Assigned(InstallModePage) and (CurPageID = InstallModePage.ID) then
+  begin
+    SelectedInstallMode := INSTALL_MODE_INSTALL;
+    for I := 0 to 2 do
+    begin
+      if InstallModePage.Values[I] then
+      begin
+        SelectedInstallMode := I;
+        Break;
+      end;
+    end;
+  end;
 
   if Assigned(AgreementPage) and (CurPageID = AgreementPage.ID) then
   begin
@@ -546,6 +633,55 @@ begin
 end;
 
 // ==========================================================================
+//  修复模式清理
+//  删除 {app} 下除 config / bootstrap / deploy / log 以外的全部子文件夹
+// ==========================================================================
+function ShouldKeepRepairFolder(const Name: String): Boolean;
+begin
+  Result :=
+    (CompareText(Name, 'config') = 0) or
+    (CompareText(Name, 'bootstrap') = 0) or
+    (CompareText(Name, 'deploy') = 0) or
+    (CompareText(Name, 'log') = 0);
+end;
+
+procedure CleanRepairFolders;
+var
+  AppDir, FolderPath: String;
+  FindRec: TFindRec;
+begin
+  if IsUnsafeInstallDir then
+    Exit;
+
+  AppDir := ExpandConstant('{app}');
+  if not DirExists(AppDir) then
+    Exit;
+
+  WizardForm.StatusLabel.Caption := '正在清理需要修复的目录...';
+
+  if FindFirst(AddBackslash(AppDir) + '*', FindRec) then
+  begin
+    try
+      repeat
+        if
+          ((FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0) and
+          (FindRec.Name <> '.') and
+          (FindRec.Name <> '..') and
+          (not ShouldKeepRepairFolder(FindRec.Name))
+        then
+        begin
+          FolderPath := AddBackslash(AppDir) + FindRec.Name;
+          WizardForm.FilenameLabel.Caption := FolderPath;
+          DelTree(FolderPath, True, True, True);
+        end;
+      until not FindNext(FindRec);
+    finally
+      FindClose(FindRec);
+    end;
+  end;
+end;
+
+// ==========================================================================
 //  安装前准备
 //  路径安全校验 → deploy.yaml 备份 → 清理残留进程
 // ==========================================================================
@@ -582,6 +718,9 @@ begin
   end;
 
   StopRunningProcesses;
+
+  if IsRepairMode then
+    CleanRepairFolders;
 end;
 
 // ==========================================================================
@@ -694,7 +833,8 @@ procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
   begin
-    RunPermissionSteps;
+    if not IsUpdateMode then
+      RunPermissionSteps;
 
     if KeepDeployYaml and (DeployYamlBackupPath <> '') then
       FileCopy(DeployYamlBackupPath, ExpandConstant('{app}\config\deploy.yaml'), False);
